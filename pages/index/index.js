@@ -18,19 +18,49 @@ const weatherColorMap = {
   'heavyrain': '#c5ccd0',
   'snow': '#aae1fc'
 }
+
+const UNPROMPTED = 0
+const UNAUTHORIZED = 1
+const AUTHORIZED = 2
+
+
 Page({
   data: {
     nowTemp: '',
     nowWeather: '',
     nowWeatherBg: '',
-    hourlyWeather: []
-  },
-  onLoad() {
-    this.getNow()
+    hourlyWeather: [],
+    city: '',
+    locationAuthType: UNPROMPTED,
+   
 
   },
-  onPullDownRefresh(){
-    this.getNow(()=>{
+  onLoad() {
+    // get location มาตรงๆ
+    wx.getSetting({
+      success: res => {
+        console.log(res)
+        let auth = res.authSetting['scope.userLocation']
+        let locationAuthType = auth ? AUTHORIZED : (auth === false) ? UNAUTHORIZED : UNPROMPTED
+      
+        this.setData({
+          locationAuthType: locationAuthType,
+        })
+        if (auth) {
+          this.getLocation()
+          this.getNow()
+        } else {
+          this.getNow() // default city - New York
+        }
+
+      },
+      fail: () => {
+        this.getNow() // default city - New York
+      }
+    })
+  },
+  onPullDownRefresh() {
+    this.getNow(() => {
       wx.stopPullDownRefresh({
         complete: (res) => {
           console.log(res)
@@ -100,7 +130,60 @@ Page({
   },
   onTapDayWeather() {
     wx.navigateTo({
-      url: '/pages/list/list',
+      url: '/pages/list/list?city=' + this.data.city,
+    })
+  },
+  onTapLocation() {
+    if (this.data.locationAuthType === UNAUTHORIZED) {
+      wx.openSetting({
+        success: (res) => {
+          let auth = res.authSetting['scope.userLocation']
+          if (auth) {
+            this.getLocation()
+          }
+        },
+      })
+    } else {
+      this.getLocation()
+    }
+  },
+  getLocation() {
+    const _this = this
+    wx.getLocation({
+      type: 'wgs84',
+      success(res) {
+        _this.setData({
+          locationAuthType: AUTHORIZED,
+        })
+        _this.reverseGeocoder(res.latitude, res.longitude)
+      },
+      fail() {
+        _this.setData({
+          locationAuthType: UNAUTHORIZED,
+        })
+      }
+    })
+  },
+  // transform location to city name
+  reverseGeocoder(lat, lon) {
+    const _this = this
+    wx.request({
+      url: 'https://nominatim.openstreetmap.org/reverse',
+      data: {
+        format: "json",
+        lat,
+        lon,
+      },
+      header: {
+        'content-type': 'application/json'
+      },
+      success(res) {
+        let city = res.data.address.state;
+        _this.setData({
+          city: city,
+          getTextLocation: ''
+        })
+      }
     })
   }
 })
